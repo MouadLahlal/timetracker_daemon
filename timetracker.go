@@ -62,35 +62,35 @@ func IsWaylandOrX11() (string) {
 
 func GetActiveWindow() (string, error) {
 	if protocol == "wayland" {
-		return GetActiveWindowKdeWl()
+		return GetActiveWindowSway(false)
 	} else {
 		return GetActiveWindowX11()
 	}
 }
 
-// NOT WORKING
-func GetActiveWindowKdeWl() (string, error) {
-	winId, err := exec.Command("kdotool", "getactivewindow").Output()
+// STILL NOT WORKING
+func GetActiveWindowSway(retry bool) (string, error) {
+	cmd := "swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .app_id'"
+
+	if retry {
+		cmd = "swaymsg -t get_tree | jq '.. | select(.type?) | select(.focused==true) | .name'"
+	}
+
+	winClass, err := exec.Command("bash", "-c", cmd).Output()
 
 	if err != nil {
 		return "", err
 	}
 
-	cmd := exec.Command("kdotool", "--debug", "getwindowname", string(winId))
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
-
-	if err != nil {
-		fmt.Println(fmt.Sprint(err) + ": " + stderr.String())
-		return "", err
+	if (string(winClass)=="null" && retry) {
+		return "", nil
 	}
 
-	return string(winId), nil
+	if string(winClass) == "null" {
+		return GetActiveWindowSway(true)
+	}
+
+	return string(winClass), nil
 }
 
 func GetActiveWindowX11() (string, error) {
@@ -274,11 +274,12 @@ func TrackTime() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		
+		fmt.Println(currentWindow)
 
 		if len(currentWindow) > 0 {
 			if len(lastWindow) > 0 {
 				SaveBuffer(SaveUsage(lastWindow, float64(currentTime - lastTime)))
-				//fmt.Println(lastWindow)
 			}
 			lastWindow = currentWindow
 			lastTime = currentTime
